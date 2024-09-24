@@ -364,6 +364,21 @@ fn main() raises:
     graph13.verify()
     var transpose_01 = session.load(graph13)
     print(".", end = " ")
+
+    var graph14 = Graph(in_types=List[Type](TensorType(DType.float32, "a", "b", "c")))
+    transposed = ops.transpose(graph14[0],1,2)
+    graph14.output(transposed)
+    graph14.verify()
+    var transpose3_12 = session.load(graph14)
+    print(".", end = " ")
+
+    var in_types = List[Type] (TensorType(DType.float32, 1, 729, 1152), TensorType(DType.float32, 1, 729, 1152))
+    var graph15 = Graph(in_types=in_types)
+    var inputs = List[Symbol] (graph15[0], graph15[1])
+    var c = ops.concat(inputs, 2)
+    graph15.output(c)
+    graph15.verify()
+    var concat = session.load(graph15)
     
 
 
@@ -421,8 +436,16 @@ fn main() raises:
     var last_layer_norm_bias = numpy_to_tensor( mypython.layer_weights('encoder.model.visual.norm.bias'))
     var last_layer_norm = LayerNorm(last_layer_norm_weight, last_layer_norm_bias)
     print(".", end = " ")
-
     #*#*#*#*#*#*#*#*
+
+
+    var last_fc1_weight = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc1.weight'))
+    var last_fc1_bias = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc1.bias'))
+    var last_fc1 = FC(last_fc1_weight, last_fc1_bias)
+    var last_fc2_weight = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc2.weight'))
+    var last_fc2_bias = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc2.bias'))
+    var last_fc2 = FC(last_fc2_weight, last_fc2_bias)
+
 
     print()
     print("Running model")
@@ -450,26 +473,35 @@ fn main() raises:
         # print("======================================================")
 
     var full_img_features = last_layer_norm.forward(x,norm)
-    print("full_img_features:", full_img_features)
 
-    var t:TensorShape = (729,1152)
-    
-    var full_img_features_reshaped = Tensor[DType.float32](t)
+    var s:TensorShape = (729,1152)
+    var full_img_features_reshaped = Tensor[DType.float32](s)
     var q_num_elements = full_img_features_reshaped.num_elements()
     var start_q = 0
     for i in range(0, q_num_elements, load_size2):
         full_img_features_reshaped.store(start_q, full_img_features.load[width=load_size2](start_q))
         start_q += load_size2
 
-    print("full_img_features_reshaped:", full_img_features_reshaped)
-
     var results = transpose_01.execute("input0", full_img_features_reshaped)
-    var trns = results.get[DType.float32]("output0")
-    print("trns:", trns)
-    t = (1152, 27, 27)
+    var t = results.get[DType.float32]("output0")
 
-    var reshaped_patch_features = trns.reshape(t)
-    print("reshaped_patch_features:", reshaped_patch_features)
+    s = (1152,27,27)
+    var r = t.reshape(s)
+
+    s = (1, 1152, 729)
+    var new_reshaped_patch_features = r.reshape(s)
+    results = transpose3_12.execute("input0", new_reshaped_patch_features)
+    var reshaped_patch_features_final = results.get[DType.float32]("output0")
+
+    results = concat.execute("input0", full_img_features, "input1", reshaped_patch_features_final)
+    var final_features = results.get[DType.float32] ("output0")
+    print("final_features:\n", final_features)
+
+    var lfc1 = last_fc1.forward(final_features, transpose, multiplication_32, addition)
+    var lg = Gelu(lfc1,tanh)
+    var lfc2 = last_fc2.forward(lg,transpose, multiplication_32,addition)
+
+    print("lfc2:\n", lfc2)
 
     var end = now()
     print("total generation time: ",(end - start)/1000000000)

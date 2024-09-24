@@ -98,22 +98,53 @@ from random import seed
 # def main():
 #     test()
 
+# fn main() raises:
+#     var qkv = Tensor[DType.float32].randn((3,1,16,792,72))
+#     print(qkv)
+#     print(qkv.num_elements())
+
+#     var q = Tensor[DType.float32] (1,16,792,72)
+#     print(q.num_elements())
+
+#     alias load_size = 256
+#     var start_q = 0
+#     var start_qkv = 0
+#     var q_num_elements = q.num_elements()
+
+#     for i in range(0, q_num_elements, load_size):
+#         q.store(start_q, qkv.load[width = load_size](start_qkv))
+#         start_q += load_size
+#         start_qkv += load_size
+
+#     print(q)
+
+alias load_size2 = 128
 fn main() raises:
-    var qkv = Tensor[DType.float32].randn((3,1,16,792,72))
-    print(qkv)
-    print(qkv.num_elements())
 
-    var q = Tensor[DType.float32] (1,16,792,72)
-    print(q.num_elements())
+    var graph13 = Graph(in_types=List[Type](TensorType(DType.float32, "a", "b")))
+    transposed = ops.transpose(graph13[0], 0, 1)
+    graph13.output(transposed)
+    graph13.verify()
+    var session = engine.InferenceSession()
+    var transpose_01 = session.load(graph13)
 
-    alias load_size = 256
+    var full_img_features = Tensor[DType.float32].randn((1,729,1152))
+    print("full_img_features:\n", full_img_features)
+
+    var s:TensorShape = (729,1152)
+    var full_img_features_reshaped = Tensor[DType.float32](s)
+    var q_num_elements = full_img_features_reshaped.num_elements()
     var start_q = 0
-    var start_qkv = 0
-    var q_num_elements = q.num_elements()
+    for i in range(0, q_num_elements, load_size2):
+        full_img_features_reshaped.store(start_q, full_img_features.load[width=load_size2](start_q))
+        start_q += load_size2
 
-    for i in range(0, q_num_elements, load_size):
-        q.store(start_q, qkv.load[width = load_size](start_qkv))
-        start_q += load_size
-        start_qkv += load_size
+    print("full_img_features_reshaped:\n", full_img_features_reshaped)
 
-    print(q)
+    var results = transpose_01.execute("input0", full_img_features_reshaped)
+    var t = results.get[DType.float32]("output0")
+    print("t:\n", t)
+
+    s = (1152,27,27)
+    var r = t.reshape(s)
+    print("reshaped_patch_features_1:\n", r)
