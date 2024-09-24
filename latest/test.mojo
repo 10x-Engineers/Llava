@@ -13,7 +13,7 @@ from max.graph.symbol import SymbolicSlice
 from utils import StaticIntTuple
 from buffer.dimlist import Dim
 from random import seed
-
+from max.graph.checkpoint import load
 
 
 # fn main() raises:
@@ -118,33 +118,39 @@ from random import seed
 
 #     print(q)
 
-alias load_size2 = 128
+# alias load_size2 = 128
+# fn main() raises:
+
+#     var graph13 = Graph(in_types=List[Type](TensorType(DType.float32, "a", "b")))
+#     transposed = ops.transpose(graph13[0], 0, 1)
+#     graph13.output(transposed)
+#     graph13.verify()
+#     var session = engine.InferenceSession()
+#     var transpose_01 = session.load(graph13)
+
+#     var full_img_features = Tensor[DType.float32].randn((1,729,1152))
+#     print("full_img_features:\n", full_img_features)
+
+#     var s:TensorShape = (729,1152)
+#     var full_img_features_reshaped = Tensor[DType.float32](s)
+#     var q_num_elements = full_img_features_reshaped.num_elements()
+#     var start_q = 0
+#     for i in range(0, q_num_elements, load_size2):
+#         full_img_features_reshaped.store(start_q, full_img_features.load[width=load_size2](start_q))
+#         start_q += load_size2
+
+#     print("full_img_features_reshaped:\n", full_img_features_reshaped)
+
+#     var results = transpose_01.execute("input0", full_img_features_reshaped)
+#     var t = results.get[DType.float32]("output0")
+#     print("t:\n", t)
+
+#     s = (1152,27,27)
+#     var r = t.reshape(s)
+#     print("reshaped_patch_features_1:\n", r)
+
 fn main() raises:
+    var tensors = load("encoder_output.maxckpt")
+    var x = tensors.get[DType.float32]("x")
 
-    var graph13 = Graph(in_types=List[Type](TensorType(DType.float32, "a", "b")))
-    transposed = ops.transpose(graph13[0], 0, 1)
-    graph13.output(transposed)
-    graph13.verify()
-    var session = engine.InferenceSession()
-    var transpose_01 = session.load(graph13)
-
-    var full_img_features = Tensor[DType.float32].randn((1,729,1152))
-    print("full_img_features:\n", full_img_features)
-
-    var s:TensorShape = (729,1152)
-    var full_img_features_reshaped = Tensor[DType.float32](s)
-    var q_num_elements = full_img_features_reshaped.num_elements()
-    var start_q = 0
-    for i in range(0, q_num_elements, load_size2):
-        full_img_features_reshaped.store(start_q, full_img_features.load[width=load_size2](start_q))
-        start_q += load_size2
-
-    print("full_img_features_reshaped:\n", full_img_features_reshaped)
-
-    var results = transpose_01.execute("input0", full_img_features_reshaped)
-    var t = results.get[DType.float32]("output0")
-    print("t:\n", t)
-
-    s = (1152,27,27)
-    var r = t.reshape(s)
-    print("reshaped_patch_features_1:\n", r)
+    print(x)

@@ -10,6 +10,7 @@ from algorithm import sum
 from utils.numerics import inf
 from algorithm import parallelize
 from memory import memcpy, memcmp, memset_zero
+from max.graph.checkpoint import save, TensorDict, load
 
 alias dim = 1152
 alias num_heads = 16
@@ -76,7 +77,6 @@ struct PatchEmbedding:
         var permute = results.get[DType.float32]("output0")
         t = (b, h * w, c * p1 * p2)
         x = permute.reshape(t)
-
         results = transpose.execute("input0", self.weights)
         var W_T = results.get[DType.float32]("output0")
         results = multiplication.execute("input0", x, "input1", W_T)
@@ -386,17 +386,19 @@ fn main() raises:
     print()
     print("Compiling Model", end = " ")
 
+    var weights = load("weights.maxckpt")
+
     var mypython = Python.import_module("helper")
     var image_path = "download.jpeg"
     var preprocessed_image:Tensor[DType.float32] = numpy_to_tensor( mypython.image_preprocessing(image_path))
     print(".", end = " ")
 
-    var patch_embed_weight = numpy_to_tensor( mypython.layer_weights('encoder.model.visual.patch_embed.linear.weight'))
-    var patch_embed_bias = numpy_to_tensor( mypython.layer_weights('encoder.model.visual.patch_embed.linear.bias'))
+    patch_embed_weight = weights.get[DType.float32]("encoder.model.visual.patch_embed.linear.weight")
+    patch_embed_bias = weights.get[DType.float32]("encoder.model.visual.patch_embed.linear.bias")
     var patch_embedding = PatchEmbedding(patch_embed_weight, patch_embed_bias)
     print(".", end = " ")
 
-    var positional_embedding = numpy_to_tensor( mypython.layer_weights('encoder.model.visual.pos_embed'))
+    positional_embedding = weights.get[DType.float32]("encoder.model.visual.pos_embed")
     print(".", end = " ")
 
 
@@ -408,44 +410,42 @@ fn main() raises:
     var FC_List_2 = List[FC] ()
 
     for i in range(total_VIT_blocks):
-        var layer_norm_weight = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.norm1.weight'))
-        var layer_norm_bias = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.norm1.bias'))
+        layer_norm_weight = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.norm1.weight')
+        layer_norm_bias = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.norm1.bias')
         Layer_Norm_1_List.append(LayerNorm(layer_norm_weight, layer_norm_bias))
 
-        var qkv_weight = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.attn.qkv.weight'))
-        var qkv_bias = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.attn.qkv.bias'))
-        var proj_weight = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.attn.proj.weight'))
-        var proj_bias = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.attn.proj.bias'))
+        qkv_weight = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.attn.qkv.weight')
+        qkv_bias = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.attn.qkv.bias')
+        proj_weight = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.attn.proj.weight')
+        proj_bias = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.attn.proj.bias')
         Attention_List.append(Attention(qkv_weight, qkv_bias, proj_weight, proj_bias))
 
-        var layer_norm_2_weight = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.norm2.weight'))
-        var layer_norm_2_bias = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.norm2.bias')) 
+        layer_norm_2_weight = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.norm2.weight')
+        layer_norm_2_bias = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.norm2.bias')
         Layer_Norm_2_List.append(LayerNorm(layer_norm_2_weight, layer_norm_2_bias))
 
-        var fc_1_weight = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.mlp.fc1.weight'))
-        var fc_1_bias = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.mlp.fc1.bias'))
+        fc_1_weight = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.mlp.fc1.weight')
+        fc_1_bias = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.mlp.fc1.bias')
         FC_List_1.append(FC(fc_1_weight, fc_1_bias))
 
-        var fc_2_weight = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.mlp.fc2.weight'))
-        var fc_2_bias = numpy_to_tensor(mypython.layer_weights('encoder.model.visual.blocks.'+str(i)+'.mlp.fc2.bias'))
+        fc_2_weight = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.mlp.fc2.weight')
+        fc_2_bias = weights.get[DType.float32]('encoder.model.visual.blocks.'+str(i)+'.mlp.fc2.bias')
         FC_List_2.append(FC(fc_2_weight, fc_2_bias))
         print(".", end = " ")
 
-
-    var last_layer_norm_weight = numpy_to_tensor( mypython.layer_weights('encoder.model.visual.norm.weight'))
-    var last_layer_norm_bias = numpy_to_tensor( mypython.layer_weights('encoder.model.visual.norm.bias'))
+    last_layer_norm_weight = weights.get[DType.float32]('encoder.model.visual.norm.weight')
+    last_layer_norm_bias = weights.get[DType.float32]('encoder.model.visual.norm.bias')
     var last_layer_norm = LayerNorm(last_layer_norm_weight, last_layer_norm_bias)
     print(".", end = " ")
     #*#*#*#*#*#*#*#*
 
-
-    var last_fc1_weight = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc1.weight'))
-    var last_fc1_bias = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc1.bias'))
+    last_fc1_weight = weights.get[DType.float32]('projection.mlp.fc1.weight')
+    last_fc1_bias = weights.get[DType.float32]('projection.mlp.fc1.bias')
     var last_fc1 = FC(last_fc1_weight, last_fc1_bias)
-    var last_fc2_weight = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc2.weight'))
-    var last_fc2_bias = numpy_to_tensor( mypython.layer_weights('projection.mlp.fc2.bias'))
-    var last_fc2 = FC(last_fc2_weight, last_fc2_bias)
 
+    last_fc2_weight = weights.get[DType.float32]('projection.mlp.fc2.weight')
+    last_fc2_bias = weights.get[DType.float32]('projection.mlp.fc2.bias')
+    var last_fc2 = FC(last_fc2_weight, last_fc2_bias)
 
     print()
     print("Running model")
@@ -469,8 +469,6 @@ fn main() raises:
         var fc2_out = FC_List_2[i].forward(g,transpose,multiplication_32,addition)
         var mlp_out = fc2_out + attention_out
         x = mlp_out
-        # print("x", x)
-        # print("======================================================")
 
     var full_img_features = last_layer_norm.forward(x,norm)
 
@@ -495,13 +493,16 @@ fn main() raises:
 
     results = concat.execute("input0", full_img_features, "input1", reshaped_patch_features_final)
     var final_features = results.get[DType.float32] ("output0")
-    print("final_features:\n", final_features)
 
     var lfc1 = last_fc1.forward(final_features, transpose, multiplication_32, addition)
     var lg = Gelu(lfc1,tanh)
     var lfc2 = last_fc2.forward(lg,transpose, multiplication_32,addition)
 
     print("lfc2:\n", lfc2)
+    tensors = TensorDict()
+    tensors.set("x", lfc2)
+
+    save(tensors,"encoder_output.maxckpt")
 
     var end = now()
     print("total generation time: ",(end - start)/1000000000)
